@@ -114,11 +114,9 @@ Main topics:
 
 The file focuses on mathematically transparent implementations of transformations such as
 
-\[
-\frac{d}{d\theta}
-=
-A(x)\frac{d}{dx}.
-\]
+$$
+\frac{d}{d\theta} = A(x)\frac{d}{dx}.
+$$
 
 Particular care is taken to distinguish:
 - chain-rule transformations,
