@@ -10,8 +10,7 @@ The main topics are:
 - interchanging sums and integrals,
 - pushing factors into sums,
 - applying transformations to summands,
-- splitting sums over additions,
-- differentiating formal power series.
+- splitting sums over additions.
 
 The functions are intentionally conservative. If a requested symbolic
 rewrite is not applicable, the original expression is returned unchanged.
@@ -88,47 +87,6 @@ def _validate_symbol(symbol, name):
 
     return symbol
 
-
-
-def _validate_nonnegative_integer(value, name):
-    """
-    Validate that an object is a non-negative integer.
-
-    Parameters
-    ----------
-    value : object
-        Object to validate.
-
-    name : str
-        Name used in the error message.
-
-    Returns
-    -------
-    int
-        The validated integer as a Python ``int``.
-
-    Raises
-    ------
-    TypeError
-        If ``value`` is not an integer.
-
-    ValueError
-        If ``value`` is negative.
-    """
-    if isinstance(value, bool):
-        raise TypeError(f"{name} must be a non-negative integer, not bool.")
-
-    if not isinstance(value, (int, sp.Integer)):
-        raise TypeError(
-            f"{name} must be a non-negative integer, got {type(value).__name__}."
-        )
-
-    value = int(value)
-
-    if value < 0:
-        raise ValueError(f"{name} must be non-negative, got {value}.")
-
-    return value
 
 
 def _sum_indices(sum_expr):
@@ -452,118 +410,6 @@ def collect_operator_terms(expr, operator, limits):
     return reduced + operator(interior, *limits)
 
 
-def diff_power_series(expr, x, order=1):
-    """
-    Differentiate a power series and shift the summation index.
-
-    The function is intended for unevaluated SymPy sums representing power
-    series of the form
-
-        Sum(a(n) * x**n, (n, 0, ...)).
-
-    After differentiating with respect to ``x``, the summation index is shifted
-    so that the result is again written as a power series in ``x**n``.
-
-    Parameters
-    ----------
-    expr : sympy.Sum
-        Unevaluated SymPy sum representing the power series.
-
-    x : sympy.Symbol
-        Variable with respect to which the series is differentiated.
-
-    order : int, optional
-        Derivative order. The default is 1.
-
-    Returns
-    -------
-    sympy.Sum
-        Differentiated and index-shifted power series.
-
-    Raises
-    ------
-    TypeError
-        If ``expr`` is not a SymPy ``Sum``, if ``x`` is not a SymPy symbol,
-        or if ``order`` is not an integer.
-
-    ValueError
-        If ``order`` is negative or if ``expr`` is not a single-index sum.
-
-    Notes
-    -----
-    The function is a structural helper for teaching and symbolic
-    experimentation. It assumes that the input is a power series in ``x`` with
-    one summation index. It does not attempt to prove convergence or justify
-    termwise differentiation.
-
-    Examples
-    --------
-    >>> i = sp.Symbol("i", integer=True, nonnegative=True)
-    >>> x = sp.Symbol("x")
-    >>> a = sp.Function("a")
-    >>> expr = sp.Sum(a(i) * x**i, (i, 0, sp.oo))
-    >>> diff_power_series(expr, x)
-    Sum((i + 1)*x**i*a(i + 1), (i, 0, oo))
-    """
-    if not isinstance(expr, sp.Sum):
-        raise TypeError(
-            f"expr must be a SymPy Sum, got {type(expr).__name__}."
-        )
-
-    x = _validate_symbol(x, "x")
-    order = _validate_nonnegative_integer(order, "order")
-
-    if len(expr.limits) != 1:
-        raise ValueError("expr must be a single-index Sum.")
-
-    summation_index, lower, upper = expr.limits[0]
-
-    if order == 0:
-        return expr
-
-    differentiated = sp.diff(expr, x, order)
-
-    if isinstance(differentiated, sp.Mul):
-        sum_factors = [
-            factor for factor in differentiated.args
-            if isinstance(factor, sp.Sum)
-        ]
-
-        if len(sum_factors) == 1:
-            sum_factor = sum_factors[0]
-            other_factors = [
-                factor for factor in differentiated.args
-                if factor != sum_factor
-            ]
-            prefactor = sp.Mul(*other_factors)
-            differentiated = sp.Sum(
-                prefactor * sum_factor.function,
-                *sum_factor.limits,
-            )
-
-    if not isinstance(differentiated, sp.Sum):
-        raise ValueError(
-            "The differentiated expression could not be rewritten as a Sum."
-        )
-
-    if len(differentiated.limits) != 1:
-        raise ValueError("The differentiated expression must be a single-index Sum.")
-
-    new_index, new_lower, new_upper = differentiated.limits[0]
-
-    shifted_summand = (
-        differentiated.function
-        .simplify()
-        .subs(new_index, summation_index + order)
-        .factor()
-    )
-
-    shifted_lower = lower
-    shifted_upper = new_upper - order if new_upper != sp.oo else sp.oo
-
-    return sp.Sum(shifted_summand, (summation_index, shifted_lower, shifted_upper))
-
-
 if __name__ == "__main__":
     # Small demonstrations when the file is executed directly.
     #
@@ -643,18 +489,5 @@ if __name__ == "__main__":
 
     print("\nTransformed:")
     print(collect_operator_terms(expr, sp.Sum, ((i, 1, n),)))
-
-    print("\n" + "=" * 72)
-    print("diff_power_series")
-    print("=" * 72)
-
-    a_func = sp.Function("a")
-    expr = sp.Sum(a_func(i) * x**i, (i, 0, sp.oo))
-
-    print("Original:")
-    print(expr)
-
-    print("\nTransformed:")
-    print(diff_power_series(expr, x))
 
 

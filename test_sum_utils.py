@@ -8,7 +8,6 @@ from sum_utils import (
     push_prefactors_into_sums,
     split_operator_over_addition,
     collect_operator_terms,
-    diff_power_series,
 )
 
 
@@ -232,62 +231,3 @@ def test_collect_operator_terms_raises_type_error_for_invalid_operator():
     with pytest.raises(TypeError):
         collect_operator_terms(expr, 1, ((i, 1, n),))
 
-
-def test_diff_power_series_first_derivative_infinite_series():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    expected = sp.Sum((i + 1) * coeff(i + 1) * x**i, (i, 0, sp.oo))
-    assert diff_power_series(expr, x) == expected
-
-
-def test_diff_power_series_second_derivative_infinite_series():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    expected = sp.Sum((i + 1) * (i + 2) * coeff(i + 2) * x**i, (i, 0, sp.oo))
-    assert diff_power_series(expr, x, order=2) == expected
-
-
-def test_diff_power_series_finite_upper_bound():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, n))
-    expected = sp.Sum((i + 1) * coeff(i + 1) * x**i, (i, 0, n - 1))
-    assert diff_power_series(expr, x) == expected
-
-
-def test_diff_power_series_order_zero_returns_original_sum():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    assert diff_power_series(expr, x, order=0) == expr
-
-
-def test_diff_power_series_raises_type_error_for_non_sum():
-    with pytest.raises(TypeError):
-        diff_power_series(x**2, x)
-
-
-def test_diff_power_series_raises_type_error_for_invalid_variable():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    with pytest.raises(TypeError):
-        diff_power_series(expr, "x")
-
-
-def test_diff_power_series_raises_type_error_for_invalid_order_type():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    with pytest.raises(TypeError):
-        diff_power_series(expr, x, order=1.5)
-
-
-def test_diff_power_series_raises_value_error_for_negative_order():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, sp.oo))
-    with pytest.raises(ValueError):
-        diff_power_series(expr, x, order=-1)
-
-
-def test_diff_power_series_raises_value_error_for_multi_index_sum():
-    coeff = sp.Function("a")
-    expr = sp.Sum(coeff(i) * x**i, (i, 0, n), (j, 0, m))
-    with pytest.raises(ValueError):
-        diff_power_series(expr, x)

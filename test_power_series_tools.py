@@ -1,7 +1,7 @@
 import pytest
 import sympy as sp
 
-from power_series_tools import PowerSumNormalizer
+from power_series_tools import PowerSumNormalizer, diff_power_series
 
 
 x, k, n, m, alpha = sp.symbols("x k n m alpha")
@@ -136,3 +136,79 @@ def test_normalize_rejects_inconsistent_shifts():
 
     with pytest.raises(ValueError):
         normalizer._normalize_single_sum(expr)
+
+
+def test_diff_power_series_first_derivative_infinite_series():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+    expected = sp.Sum((k + 1) * coeff(k + 1) * x**k, (k, 0, sp.oo))
+
+    result = diff_power_series(expr, x)
+
+    assert result == expected
+
+
+def test_diff_power_series_second_derivative_infinite_series():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+    expected = sp.Sum((k + 1) * (k + 2) * coeff(k + 2) * x**k, (k, 0, sp.oo))
+
+    result = diff_power_series(expr, x, order=2)
+
+    assert result == expected
+
+
+def test_diff_power_series_finite_upper_bound():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, n))
+    expected = sp.Sum((k + 1) * coeff(k + 1) * x**k, (k, 0, n - 1))
+
+    result = diff_power_series(expr, x)
+
+    assert result == expected
+
+
+def test_diff_power_series_order_zero_returns_original_sum():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+
+    result = diff_power_series(expr, x, order=0)
+
+    assert result == expr
+
+
+def test_diff_power_series_raises_type_error_for_non_sum():
+    with pytest.raises(TypeError):
+        diff_power_series(x**2, x)
+
+
+def test_diff_power_series_raises_type_error_for_invalid_variable():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+
+    with pytest.raises(TypeError):
+        diff_power_series(expr, "x")
+
+
+def test_diff_power_series_raises_type_error_for_invalid_order_type():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+
+    with pytest.raises(TypeError):
+        diff_power_series(expr, x, order=1.5)
+
+
+def test_diff_power_series_raises_value_error_for_negative_order():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, sp.oo))
+
+    with pytest.raises(ValueError):
+        diff_power_series(expr, x, order=-1)
+
+
+def test_diff_power_series_raises_value_error_for_multi_index_sum():
+    coeff = sp.Function("c")
+    expr = sp.Sum(coeff(k) * x**k, (k, 0, n), (m, 0, sp.oo))
+
+    with pytest.raises(ValueError):
+        diff_power_series(expr, x)
