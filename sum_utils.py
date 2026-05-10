@@ -340,53 +340,73 @@ def push_prefactors_into_sums(expr):
     return expr.xreplace(replacements)
 
 
-def split_sum_of_addition(expr):
+
+def split_operator_over_addition(expr, operator):
     """
-    Split a sum over an addition into an addition of sums.
+    Split linear operators over additions.
 
     The transformation is
 
-        Sum(f_i + g_i, (i, ...)) -> Sum(f_i, (i, ...)) + Sum(g_i, (i, ...))
+        L(f + g) -> L(f) + L(g)
 
-    and is applied to all matching sums inside ``expr``.
-
-    Parameters
-    ----------
-    expr : sympy.Expr
-        Expression to transform.
-
-    Returns
-    -------
-    sympy.Expr
-        Expression with additive summands split into separate sums. If no
-        additive summand is found, the expression is returned unchanged.
-
-    Raises
-    ------
-    TypeError
-        If ``expr`` cannot be converted to a SymPy expression.
-
-    Examples
-    --------
-    >>> i, n, x = sp.symbols("i n x")
-    >>> expr = sp.Sum(i + x, (i, 1, n))
-    >>> split_sum_of_addition(expr)
-    Sum(i, (i, 1, n)) + Sum(x, (i, 1, n))
+    where ``L`` is a linear operator such as ``sp.Sum`` or
+    ``sp.Integral``.
     """
     expr = _as_expr(expr, "expr")
 
+    if not callable(operator):
+        raise TypeError(
+            "operator must be a callable SymPy operator class."
+        )
+
     replacements = {}
 
-    for sum_expr in expr.find(sp.Sum):
-        summand = sum_expr.function
-        limits = sum_expr.limits
+    for op_expr in expr.find(operator):
+        interior = op_expr.function
+        limits = op_expr.limits
 
-        if isinstance(summand, sp.Add):
-            replacements[sum_expr] = sp.Add(
-                *(sp.Sum(term, *limits) for term in summand.args)
+        if isinstance(interior, sp.Add):
+            replacements[op_expr] = sp.Add(
+                *(operator(term, *limits) for term in interior.args)
             )
 
     return expr.xreplace(replacements)
+
+
+def collect_operator_terms(expr, operator, limits):
+    """
+    Collect operators with identical limits into a single operator.
+
+    The transformation is
+
+        L(f) + L(g) -> L(f + g)
+
+    where ``L`` is a linear operator such as ``sp.Sum`` or
+    ``sp.Integral``.
+    """
+    expr = _as_expr(expr, "expr")
+
+    if not callable(operator):
+        raise TypeError(
+            "operator must be a callable SymPy operator class."
+        )
+
+    targets = [
+        op_expr for op_expr in expr.find(operator)
+        if op_expr.limits == limits
+    ]
+
+    if not targets:
+        return expr
+
+    reduced = expr
+
+    for op_expr in targets:
+        reduced = reduced.subs(op_expr, 0)
+
+    interior = sp.Add(*(op.function for op in targets)).simplify()
+
+    return reduced + operator(interior, *limits)
 
 
 if __name__ == "__main__":
@@ -446,7 +466,7 @@ if __name__ == "__main__":
     print(push_prefactors_into_sums(expr))
 
     print("\n" + "=" * 72)
-    print("split_sum_of_addition")
+    print("split_operator_over_addition")
     print("=" * 72)
 
     expr = sp.Sum(i + x, (i, 1, n))
@@ -455,4 +475,17 @@ if __name__ == "__main__":
     print(expr)
 
     print("\nTransformed:")
-    print(split_sum_of_addition(expr))
+    print(split_operator_over_addition(expr, sp.Sum))
+
+    print("\n" + "=" * 72)
+    print("collect_operator_terms")
+    print("=" * 72)
+
+    expr = sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+
+    print("Original:")
+    print(expr)
+
+    print("\nTransformed:")
+    print(collect_operator_terms(expr, sp.Sum, ((i, 1, n),)))
+

@@ -6,7 +6,8 @@ from sum_utils import (
     push_factor_into_sum,
     apply_to_summand,
     push_prefactors_into_sums,
-    split_sum_of_addition,
+    split_operator_over_addition,
+    collect_operator_terms,
 )
 
 
@@ -225,36 +226,46 @@ def test_push_prefactors_into_sums_raises_type_error_for_invalid_input():
         push_prefactors_into_sums(object())
 
 
-def test_split_sum_of_addition_basic():
+def test_split_operator_over_addition_sum_basic():
     # A sum over an addition should become an addition of sums.
     expr = sp.Sum(i + x, (i, 1, n))
     expected = sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
 
-    result = split_sum_of_addition(expr)
+    result = split_operator_over_addition(expr, sp.Sum)
 
     assert result == expected
 
 
-def test_split_sum_of_addition_inside_larger_expression():
+def test_split_operator_over_addition_integral_basic():
+    # An integral over an addition should become an addition of integrals.
+    expr = sp.Integral(x + 1, x)
+    expected = sp.Integral(x, x) + sp.Integral(1, x)
+
+    result = split_operator_over_addition(expr, sp.Integral)
+
+    assert result == expected
+
+
+def test_split_operator_over_addition_inside_larger_expression():
     # The transformation should also work inside a larger expression.
     expr = 1 + sp.Sum(i + x, (i, 1, n))
     expected = 1 + sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
 
-    result = split_sum_of_addition(expr)
+    result = split_operator_over_addition(expr, sp.Sum)
 
     assert result == expected
 
 
-def test_split_sum_of_addition_leaves_non_additive_summand_unchanged():
-    # If the summand is not an addition, nothing should change.
+def test_split_operator_over_addition_leaves_non_additive_interior_unchanged():
+    # If the interior is not an addition, nothing should change.
     expr = sp.Sum(i * x, (i, 1, n))
 
-    result = split_sum_of_addition(expr)
+    result = split_operator_over_addition(expr, sp.Sum)
 
     assert result == expr
 
 
-def test_split_sum_of_addition_multi_limit_sum():
+def test_split_operator_over_addition_multi_limit_sum():
     # Splitting should preserve all summation limits.
     expr = sp.Sum(i + j + x, (i, 1, n), (j, 1, m))
     expected = (
@@ -263,12 +274,104 @@ def test_split_sum_of_addition_multi_limit_sum():
         + sp.Sum(x, (i, 1, n), (j, 1, m))
     )
 
-    result = split_sum_of_addition(expr)
+    result = split_operator_over_addition(expr, sp.Sum)
 
     assert result == expected
 
 
-def test_split_sum_of_addition_raises_type_error_for_invalid_input():
+def test_split_operator_over_addition_raises_type_error_for_invalid_input():
     # Objects that cannot be sympified should raise TypeError.
     with pytest.raises(TypeError):
-        split_sum_of_addition(object())
+        split_operator_over_addition(object(), sp.Sum)
+
+
+def test_split_operator_over_addition_raises_type_error_for_invalid_operator():
+    # The operator must be callable.
+    expr = sp.Sum(i + x, (i, 1, n))
+
+    with pytest.raises(TypeError):
+        split_operator_over_addition(expr, 1)
+
+
+def test_collect_operator_terms_sum_basic():
+    # Sums with identical limits should be collected.
+    expr = sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+    expected = sp.Sum(i + x, (i, 1, n))
+
+    result = collect_operator_terms(
+        expr,
+        sp.Sum,
+        ((i, 1, n),),
+    )
+
+    assert result == expected
+
+
+def test_collect_operator_terms_integral_basic():
+    # Integrals with identical limits should be collected.
+    expr = sp.Integral(x, x) + sp.Integral(x**2, x)
+
+    result = collect_operator_terms(
+        expr,
+        sp.Integral,
+        ((x,),),
+    )
+
+    assert isinstance(result, sp.Integral)
+    assert result.limits == ((x,),)
+    assert sp.simplify(result.function - (x**2 + x)) == 0
+
+
+def test_collect_operator_terms_inside_larger_expression():
+    # The collection should also work inside a larger expression.
+    expr = 1 + sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+    expected = 1 + sp.Sum(i + x, (i, 1, n))
+
+    result = collect_operator_terms(
+        expr,
+        sp.Sum,
+        ((i, 1, n),),
+    )
+
+    assert result == expected
+
+
+def test_collect_operator_terms_leaves_expression_unchanged_if_no_match():
+    # Expressions without matching operators should stay unchanged.
+    expr = sp.Sum(i, (i, 1, n))
+
+    result = collect_operator_terms(
+        expr,
+        sp.Sum,
+        ((j, 1, m),),
+    )
+
+    assert result == expr
+
+
+def test_collect_operator_terms_only_collects_matching_limits():
+    # Operators with different limits should not be collected.
+    expr = sp.Sum(i, (i, 1, n)) + sp.Sum(j, (j, 1, m))
+    expected = expr
+
+    result = collect_operator_terms(
+        expr,
+        sp.Sum,
+        ((i, 1, m),),
+    )
+
+    assert result == expected
+
+
+def test_collect_operator_terms_raises_type_error_for_invalid_input():
+    # Objects that cannot be sympified should raise TypeError.
+    with pytest.raises(TypeError):
+        collect_operator_terms(object(), sp.Sum, ((i, 1, n),))
+
+
+def test_collect_operator_terms_raises_type_error_for_invalid_operator():
+    # The operator must be callable.
+    expr = sp.Sum(i, (i, 1, n))
+
+    with pytest.raises(TypeError):
+        collect_operator_terms(expr, 1, ((i, 1, n),))
