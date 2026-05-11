@@ -8,6 +8,7 @@ from sum_utils import (
     push_prefactors_into_sums,
     split_operator_over_addition,
     collect_operator_terms,
+    rewrite_sum_lower_limit,
 )
 
 
@@ -231,3 +232,100 @@ def test_collect_operator_terms_raises_type_error_for_invalid_operator():
     with pytest.raises(TypeError):
         collect_operator_terms(expr, 1, ((i, 1, n),))
 
+
+def test_rewrite_sum_lower_limit_moves_lower_limit_up():
+    expr = sp.Sum(x**i, (i, 0, 10))
+    expected = 1 + x + sp.Sum(x**i, (i, 2, 10))
+
+    result = rewrite_sum_lower_limit(expr, 2, index=i)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_moves_lower_limit_down():
+    expr = sp.Sum(x**i, (i, 2, 10))
+    expected = sp.Sum(x**i, (i, 0, 10)) - 1 - x
+
+    result = rewrite_sum_lower_limit(expr, 0, index=i)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_inside_larger_expression():
+    expr = 7 + sp.Sum(x**i, (i, 0, 10))
+    expected = 8 + x + sp.Sum(x**i, (i, 2, 10))
+
+    result = rewrite_sum_lower_limit(expr, 2, index=i)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_only_rewrites_matching_index():
+    expr = sp.Sum(x**i, (i, 0, 10)) + sp.Sum(x**j, (j, 0, 10))
+    expected = 1 + x + sp.Sum(x**i, (i, 2, 10)) + sp.Sum(x**j, (j, 0, 10))
+
+    result = rewrite_sum_lower_limit(expr, 2, index=i)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_rewrites_all_single_index_sums_without_index_argument():
+    expr = sp.Sum(x**i, (i, 0, 10)) + sp.Sum(x**j, (j, 0, 10))
+    expected = (
+        1 + x + sp.Sum(x**i, (i, 2, 10))
+        + 1 + x + sp.Sum(x**j, (j, 2, 10))
+    )
+
+    result = rewrite_sum_lower_limit(expr, 2)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_no_change_if_lower_limit_already_matches():
+    expr = sp.Sum(x**i, (i, 2, 10))
+
+    result = rewrite_sum_lower_limit(expr, 2, index=i)
+
+    assert result == expr
+
+
+def test_rewrite_sum_lower_limit_works_with_symbolic_upper_bound():
+    expr = sp.Sum(x**i, (i, 0, n))
+    expected = 1 + x + sp.Sum(x**i, (i, 2, n))
+
+    result = rewrite_sum_lower_limit(expr, 2, index=i)
+
+    assert result == expected
+
+
+def test_rewrite_sum_lower_limit_raises_type_error_for_invalid_input():
+    with pytest.raises(TypeError):
+        rewrite_sum_lower_limit(object(), 0, index=i)
+
+
+def test_rewrite_sum_lower_limit_raises_type_error_for_invalid_index():
+    expr = sp.Sum(x**i, (i, 0, 10))
+
+    with pytest.raises(TypeError):
+        rewrite_sum_lower_limit(expr, 2, index="i")
+
+
+def test_rewrite_sum_lower_limit_raises_value_error_for_non_integer_shift():
+    expr = sp.Sum(x**i, (i, 0, 10))
+
+    with pytest.raises(ValueError):
+        rewrite_sum_lower_limit(expr, sp.Rational(1, 2), index=i)
+
+
+def test_rewrite_sum_lower_limit_raises_value_error_for_symbolic_shift():
+    expr = sp.Sum(x**i, (i, 0, 10))
+
+    with pytest.raises(ValueError):
+        rewrite_sum_lower_limit(expr, n, index=i)
+
+
+def test_rewrite_sum_lower_limit_raises_value_error_for_matching_multi_index_sum():
+    expr = sp.Sum(x**i * j, (i, 0, 10), (j, 0, 5))
+
+    with pytest.raises(ValueError):
+        rewrite_sum_lower_limit(expr, 2, index=i)

@@ -10,7 +10,8 @@ The main topics are:
 - interchanging sums and integrals,
 - pushing factors into sums,
 - applying transformations to summands,
-- splitting sums over additions.
+- splitting sums over additions,
+- rewriting summation lower limits.
 
 The functions are intentionally conservative. If a requested symbolic
 rewrite is not applicable, the original expression is returned unchanged.
@@ -342,6 +343,115 @@ def push_prefactors_into_sums(expr):
 
 
 
+
+def rewrite_sum_lower_limit(expr, new_lower, index=None):
+    """
+    Rewrite sums to a new lower summation limit.
+
+    For a single-index sum ``Sum(f(k), (k, a, b))`` the lower limit is
+    rewritten to ``new_lower`` by adding or subtracting the finite correction
+    terms.
+
+    If ``new_lower > a``::
+
+        Sum(f(k), (k, a, b))
+        -> f(a) + ... + f(new_lower - 1) + Sum(f(k), (k, new_lower, b))
+
+    If ``new_lower < a``::
+
+        Sum(f(k), (k, a, b))
+        -> Sum(f(k), (k, new_lower, b))
+           - (f(new_lower) + ... + f(a - 1))
+
+    Parameters
+    ----------
+    expr : sympy.Expr
+        Expression containing sums.
+
+    new_lower : sympy.Expr
+        New lower summation limit.
+
+    index : sympy.Symbol, optional
+        If given, only sums with this summation index are rewritten.
+
+    Returns
+    -------
+    sympy.Expr
+        Expression with rewritten lower summation limits.
+
+    Raises
+    ------
+    TypeError
+        If ``expr`` cannot be converted to a SymPy expression or if ``index``
+        is not a SymPy symbol.
+
+    ValueError
+        If a matching sum has more than one summation index or if the
+        lower-limit shift is not an explicit integer.
+
+    Examples
+    --------
+    >>> i, x = sp.symbols("i x")
+    >>> expr = sp.Sum(x**i, (i, 0, 10))
+    >>> rewrite_sum_lower_limit(expr, 2, index=i)
+    x + Sum(x**i, (i, 2, 10)) + 1
+    """
+    expr = _as_expr(expr, "expr")
+    new_lower = _as_expr(new_lower, "new_lower")
+
+    if index is not None:
+        index = _validate_symbol(index, "index")
+
+    replacements = {}
+
+    for sum_expr in expr.find(sp.Sum):
+        if len(sum_expr.limits) != 1:
+            if index is None or any(limit[0] == index for limit in sum_expr.limits):
+                raise ValueError(
+                    "rewrite_sum_lower_limit only supports single-index sums."
+                )
+            continue
+
+        summation_index, old_lower, upper = sum_expr.limits[0]
+
+        if index is not None and summation_index != index:
+            continue
+
+        shift = sp.simplify(new_lower - old_lower)
+
+        if shift == 0:
+            continue
+
+        if not shift.is_integer or not shift.is_number:
+            raise ValueError(
+                "The difference between old and new lower limit must be an "
+                "explicit integer."
+            )
+
+        shift_int = int(shift)
+        summand = sum_expr.function
+
+        if shift_int > 0:
+            correction = sp.Add(*[
+                summand.subs(summation_index, old_lower + offset)
+                for offset in range(shift_int)
+            ])
+            replacements[sum_expr] = correction + sp.Sum(
+                summand,
+                (summation_index, new_lower, upper),
+            )
+        else:
+            correction = sp.Add(*[
+                summand.subs(summation_index, new_lower + offset)
+                for offset in range(-shift_int)
+            ])
+            replacements[sum_expr] = sp.Sum(
+                summand,
+                (summation_index, new_lower, upper),
+            ) - correction
+
+    return expr.xreplace(replacements)
+
 def split_operator_over_addition(expr, operator):
     """
     Split linear operators over additions.
@@ -489,5 +599,18 @@ if __name__ == "__main__":
 
     print("\nTransformed:")
     print(collect_operator_terms(expr, sp.Sum, ((i, 1, n),)))
+
+    print("\n" + "=" * 72)
+    print("rewrite_sum_lower_limit")
+    print("=" * 72)
+
+    expr = sp.Sum(x**i, (i, 0, n))
+
+    print("Original:")
+    print(expr)
+
+    print("\nTransformed:")
+    print(rewrite_sum_lower_limit(expr, 2, index=i))
+
 
 
