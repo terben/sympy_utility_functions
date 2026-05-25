@@ -84,8 +84,8 @@ def _validate_function_class(func, name):
         test_value = func(test_symbol)
     except Exception as exc:
         raise TypeError(
-            f"{name} must be a SymPy function class, for example "
-            f"sp.Function('U')."
+            f"{name} must be a SymPy function class or compatible callable, "
+            f"for example sp.Function('U')."
         ) from exc
 
     if not isinstance(test_value, sp.Expr):
@@ -327,11 +327,13 @@ def transform_ode(eq, old_var, new_sym, f_theta, g_x, old_func, new_func):
 
     Mathematical setting
     --------------------
-    The independent variable is changed by
+    The independent variable is changed explicitly by
 
         x = f(theta),     theta = g(x).
 
-    The dependent function is transformed as
+    Thus the new variable is known as a concrete expression in the old
+    variable, and the inverse relation is also supplied explicitly. The
+    dependent function is transformed as
 
         U(theta) = V(x).
 
@@ -522,12 +524,14 @@ def reparametrize_by_state(eq, old_var, state_func, velocity_func, new_sym, new_
 
     Important
     ---------
-    This is not an explicit coordinate transformation ``x = f(t)``. It is a
-    dynamical reparametrization along solution curves.
+    This is not an explicit coordinate transformation ``x = f(t)``. Instead,
+    the new independent variable is the state variable along a solution curve.
 
     The function is intended for autonomous equations. If explicit occurrences
-    of ``old_var`` remain after the transformation, the result is not a closed
-    ODE for ``V(x)``.
+    of ``old_var`` remain after the transformation, the result is deliberately
+    left as a non-closed equation for ``V(x)``. Use
+    ``reparametrize_nonautonomous_by_state`` when the old time variable should
+    be replaced by an additional unknown function ``T(x)``.
 
     Parameters
     ----------
@@ -657,7 +661,8 @@ def reparametrize_nonautonomous_by_state(
         dv/dt = F(t, X, v).
 
     Since the old independent variable ``t`` appears explicitly, it cannot
-    simply disappear. Introduce
+    simply disappear. The transformed problem is usually a coupled system, not
+    a single closed equation. Introduce
 
         t = T(x),     v(t) = V(x),     x = X(t).
 
@@ -809,9 +814,8 @@ def reparametrize_nonautonomous_by_state(
     return main_eq
 
 
-if __name__ == "__main__":
-    # Small demonstrations when the file is executed directly.
-    #
+def main():
+    """Run small demonstrations for direct execution of this file."""
     # The examples are intentionally short. They are meant to show the input
     # equation or expression together with the transformed result.
 
@@ -885,3 +889,7 @@ if __name__ == "__main__":
     main_eq, auxiliary_eq = reparametrize_nonautonomous_by_state(eq, t, X, v, x, T, V)
     print(main_eq)
     print(auxiliary_eq)
+
+
+if __name__ == "__main__":
+    main()

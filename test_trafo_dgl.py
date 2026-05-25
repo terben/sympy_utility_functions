@@ -523,3 +523,106 @@ def test_reparametrize_nonautonomous_by_state_transforms_state_acceleration():
 
     assert_eq_lhs_equal(main_eq, expected_main)
     assert_eq_lhs_equal(aux_eq, expected_aux)
+
+
+# ---------------------------------------------------------------------------
+# Validation and API error handling
+# ---------------------------------------------------------------------------
+
+
+def test_apply_operator_forward_rejects_invalid_variable():
+    x = sp.Symbol("x")
+
+    try:
+        apply_operator_forward(x**2, x, "x", 1)
+    except TypeError as exc:
+        assert "x must be a SymPy Symbol" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_apply_operator_forward_rejects_non_integer_order():
+    x = sp.Symbol("x")
+
+    try:
+        apply_operator_forward(x**2, x, x, 1.5)
+    except TypeError as exc:
+        assert "n must be a non-negative integer" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_apply_operator_forward_rejects_bool_order():
+    x = sp.Symbol("x")
+
+    try:
+        apply_operator_forward(x**2, x, x, True)
+    except TypeError as exc:
+        assert "not bool" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_apply_operator_forward_rejects_negative_order():
+    x = sp.Symbol("x")
+
+    try:
+        apply_operator_forward(x**2, x, x, -1)
+    except ValueError as exc:
+        assert "n must be non-negative" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_transform_ode_rejects_invalid_old_variable():
+    x, t = sp.symbols("x t")
+    Y = sp.Function("Y")
+    U = sp.Function("U")
+    eq = sp.Eq(Y(x), 0)
+
+    try:
+        transform_ode(eq, "x", t, sp.log(x), sp.exp(t), Y, U)
+    except TypeError as exc:
+        assert "old_var must be a SymPy Symbol" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_transform_ode_rejects_invalid_function_class():
+    x, t = sp.symbols("x t")
+    Y = sp.Function("Y")
+    eq = sp.Eq(Y(x), 0)
+
+    try:
+        transform_ode(eq, x, t, sp.log(x), sp.exp(t), Y, "U")
+    except TypeError as exc:
+        assert "new_func must be a SymPy function class" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
+
+
+def test_reparametrize_nonautonomous_by_state_rejects_invalid_return_auxiliary():
+    t, x = sp.symbols("t x")
+    X = sp.Function("X")
+    v = sp.Function("v")
+    T = sp.Function("T")
+    V = sp.Function("V")
+    eq = sp.Eq(sp.diff(v(t), t), t * X(t))
+
+    from trafo_dgl import reparametrize_nonautonomous_by_state
+
+    try:
+        reparametrize_nonautonomous_by_state(
+            eq=eq,
+            old_var=t,
+            state_func=X,
+            velocity_func=v,
+            new_sym=x,
+            new_time_func=T,
+            new_velocity_func=V,
+            return_auxiliary="yes",
+        )
+    except TypeError as exc:
+        assert "return_auxiliary must be bool" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError")
