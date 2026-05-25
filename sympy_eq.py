@@ -22,6 +22,10 @@ the familiar SymPy equation behavior, but also allows direct assignment to
 SymPy expressions are normally treated as immutable objects. Directly
 changing ``lhs`` or ``rhs`` is therefore useful in teaching contexts, but it
 should not be viewed as a general pattern for low-level SymPy programming.
+
+The arithmetic operations are formal symbolic transformations. In particular,
+division by an expression does not check whether that expression can be zero;
+users are responsible for the corresponding mathematical side conditions.
 """
 
 import sympy as sp
@@ -117,6 +121,10 @@ class Eq(sp.Eq):
     Arithmetic operations with another SymPy equation combine corresponding
     sides.
 
+    Division operations are purely symbolic. They do not check whether the
+    divisor may be zero. This keeps the class simple for interactive work, but
+    mathematical side conditions must be considered separately.
+
     Examples
     --------
     >>> x = sp.Symbol("x")
@@ -125,6 +133,37 @@ class Eq(sp.Eq):
     >>> Eq(2*x, 6) / 2
     Eq(x, 3)
     """
+
+
+    def __new__(cls, lhs, rhs, **options):
+        """
+        Create a symbolic equation after validating both sides.
+
+        Parameters
+        ----------
+        lhs : sympy.Expr
+            Left-hand side of the equation.
+
+        rhs : sympy.Expr
+            Right-hand side of the equation.
+
+        **options
+            Additional options passed to ``sympy.Eq``.
+
+        Returns
+        -------
+        Eq
+            New equation object.
+
+        Raises
+        ------
+        TypeError
+            If ``lhs`` or ``rhs`` cannot be converted to a SymPy expression.
+        """
+        lhs = _as_expr(lhs, "lhs")
+        rhs = _as_expr(rhs, "rhs")
+
+        return super().__new__(cls, lhs, rhs, **options)
 
     @property
     def lhs(self):
@@ -150,9 +189,10 @@ class Eq(sp.Eq):
 
         Notes
         -----
-        This setter is intended for interactive and didactic use. SymPy
-        objects are normally immutable, so direct side assignment should be
-        used with care in more advanced code.
+        This setter is intended for interactive and didactic use. It mutates
+        the internal arguments of an object that is normally treated as
+        immutable in SymPy. This is convenient in notebooks and teaching
+        examples, but should be used with care in library-style code.
         """
         self._args = (_as_expr(lhs, "lhs"), self.rhs)
 
@@ -180,9 +220,10 @@ class Eq(sp.Eq):
 
         Notes
         -----
-        This setter is intended for interactive and didactic use. SymPy
-        objects are normally immutable, so direct side assignment should be
-        used with care in more advanced code.
+        This setter is intended for interactive and didactic use. It mutates
+        the internal arguments of an object that is normally treated as
+        immutable in SymPy. This is convenient in notebooks and teaching
+        examples, but should be used with care in library-style code.
         """
         self._args = (self.lhs, _as_expr(rhs, "rhs"))
 
@@ -314,6 +355,10 @@ class Eq(sp.Eq):
         -------
         Eq
             New equation.
+
+        Notes
+        -----
+        This operation does not check whether the divisor can be zero.
         """
         if isinstance(other, sp.Equality):
             return Eq(self.lhs / other.lhs, self.rhs / other.rhs)
@@ -334,6 +379,10 @@ class Eq(sp.Eq):
         -------
         Eq
             New equation.
+
+        Notes
+        -----
+        This operation does not check whether either side can be zero.
         """
         other = _as_expr(other, "other")
         return Eq(other / self.lhs, other / self.rhs)
@@ -425,7 +474,13 @@ class Eq(sp.Eq):
 
     def solve(self, symbol):
         """
-        Solve the equation for one symbol.
+        Solve the equation for one symbol if the solution is unique.
+
+        This method is intentionally small and didactic. It calls
+        ``sympy.solve`` on ``lhs - rhs`` and only accepts the result if
+        exactly one solution is returned. Equations with no solution, several
+        solutions, or solution sets that SymPy does not return as a single
+        expression raise ``ValueError``.
 
         Parameters
         ----------
@@ -458,7 +513,8 @@ class Eq(sp.Eq):
         return Eq(symbol, solutions[0])
 
 
-if __name__ == "__main__":
+def main():
+    """Run a small command-line demonstration."""
     # Small demonstrations when the file is executed directly.
     #
     # The examples are intentionally short. They show the original equation
@@ -542,3 +598,8 @@ if __name__ == "__main__":
 
     print("\nTransformed:")
     print(eq)
+
+
+
+if __name__ == "__main__":
+    main()

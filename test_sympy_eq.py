@@ -125,3 +125,34 @@ def test_invalid_arithmetic_input_raises_type_error():
 
     with pytest.raises(TypeError):
         eq + object()
+
+
+def test_constructor_rejects_invalid_lhs():
+    with pytest.raises(TypeError):
+        Eq(object(), 1)
+
+
+def test_constructor_rejects_invalid_rhs():
+    with pytest.raises(TypeError):
+        Eq(1, object())
+
+
+def test_lhs_setter_rejects_invalid_input():
+    eq = Eq(x, 2)
+
+    with pytest.raises(TypeError):
+        eq.lhs = object()
+
+
+def test_rhs_setter_rejects_invalid_input():
+    eq = Eq(x, 2)
+
+    with pytest.raises(TypeError):
+        eq.rhs = object()
+
+
+def test_power_rejects_invalid_exponent():
+    eq = Eq(x, 2)
+
+    with pytest.raises(TypeError):
+        eq ** object()
