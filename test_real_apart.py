@@ -85,6 +85,10 @@ class TestRealApart(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "x must be a SymPy Symbol"):
             real_apart(1 / (self.x + 1), self.x + 1)
 
+    def test_rejects_string_variable(self):
+        with self.assertRaisesRegex(TypeError, "x must be a SymPy Symbol"):
+            real_apart(1 / (self.x + 1), "x")
+
     def test_rejects_non_rational_expression(self):
         with self.assertRaisesRegex(ValueError, "expr must be rational in x"):
             real_apart(sp.sin(self.x), self.x)
@@ -101,3 +105,4 @@ class TestRealApart(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

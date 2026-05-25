@@ -102,6 +102,19 @@ class TestIntegrateByParts(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "integration variable must be a SymPy Symbol"):
             integrate_by_parts(sp.Integral(f(x), f(x)), f(x), sp.Integer(1))
 
+    def test_invalid_u_raises_type_error(self):
+        x = self.x
+
+        with self.assertRaisesRegex(TypeError, "u must be a SymPy expression"):
+            integrate_by_parts(sp.Integral(x, x), object(), sp.Integer(1))
+
+    def test_invalid_vp_raises_type_error(self):
+        x = self.x
+
+        with self.assertRaisesRegex(TypeError, "vp must be a SymPy expression"):
+            integrate_by_parts(sp.Integral(x, x), x, object())
+
 
 if __name__ == "__main__":
     unittest.main()
+

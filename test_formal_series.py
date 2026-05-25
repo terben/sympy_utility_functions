@@ -65,11 +65,32 @@ def test_small_expr_not_found_raises():
         formal_series(sp.sin(x), x + y, n=6)
 
 
-def test_invalid_order_raises():
+def test_zero_order_raises_value_error():
     x = sp.symbols("x")
 
     with pytest.raises(ValueError, match="n must be a positive integer"):
         formal_series(sp.sin(x), x, n=0)
+
+
+def test_negative_order_raises_value_error():
+    x = sp.symbols("x")
+
+    with pytest.raises(ValueError, match="n must be a positive integer"):
+        formal_series(sp.sin(x), x, n=-1)
+
+
+def test_non_integer_order_raises_type_error():
+    x = sp.symbols("x")
+
+    with pytest.raises(TypeError, match="n must be a positive integer"):
+        formal_series(sp.sin(x), x, n=2.5)
+
+
+def test_boolean_order_raises_type_error():
+    x = sp.symbols("x")
+
+    with pytest.raises(TypeError, match="n must be a positive integer"):
+        formal_series(sp.sin(x), x, n=True)
 
 
 def test_invalid_dummy_raises():
@@ -85,3 +106,4 @@ def test_expression_equal_to_small_expr():
     result = formal_series(x + y, x + y, n=4)
 
     assert result == x + y
+
