@@ -78,6 +78,40 @@ def test_normalize_with_shifted_target_exponent():
     assert result == expected
 
 
+def test_normalize_negative_shifted_power_sum():
+    normalizer = PowerSumNormalizer(x, n)
+    expr = sp.Sum(a(k) * x**(k - 1), (k, 0, sp.oo))
+    expected = sp.Sum(x**n * a(n + 1), (n, -1, sp.oo))
+
+    result = normalizer.normalize(expr)
+
+    assert result == expected
+
+
+def test_normalize_combines_plain_x_factor_with_index_power():
+    normalizer = PowerSumNormalizer(x, n)
+    summand = sp.Mul(a(k), x, x**k, evaluate=False)
+    expr = sp.Sum(summand, (k, 0, sp.oo))
+    expected = sp.Sum(x**n * a(n - 1), (n, 1, sp.oo))
+
+    result = normalizer.normalize(expr)
+
+    assert result == expected
+
+
+def test_normalize_combines_prefactor_and_additive_summand():
+    normalizer = PowerSumNormalizer(x, n)
+    expr = x * sp.Sum(a(k) * x**k + b(k) * x**(k + 1), (k, 0, sp.oo))
+    expected = (
+        sp.Sum(x**n * a(n - 1), (n, 1, sp.oo))
+        + sp.Sum(x**n * b(n - 2), (n, 2, sp.oo))
+    )
+
+    result = normalizer.normalize(expr)
+
+    assert result == expected
+
+
 def test_normalize_expression_without_sums_is_unchanged():
     normalizer = PowerSumNormalizer(x, n)
     expr = x**2 + 1

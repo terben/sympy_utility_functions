@@ -21,7 +21,7 @@ This is useful for:
 
 import sympy as sp
 
-from sum_utils import split_operator_over_addition, push_prefactors_into_sums
+from sum_utils import push_prefactors_into_sums, split_operator_over_addition
 
 
 def _as_expr(expr, name):
@@ -142,7 +142,9 @@ def diff_power_series(expr, x, order=1):
         Sum(a(n) * x**n, (n, 0, ...)).
 
     After differentiating with respect to ``x``, the summation index is shifted
-    so that the result is again written as a power series in ``x**n``.
+    so that the result is again written as a power series in ``x**n``. This is
+    a structural helper: it assumes that the differentiated expression remains
+    representable as a single SymPy ``Sum``.
 
     Parameters
     ----------
@@ -173,8 +175,10 @@ def diff_power_series(expr, x, order=1):
     -----
     The function is a structural helper for teaching and symbolic
     experimentation. It assumes that the input is a power series in ``x`` with
-    one summation index. It does not attempt to prove convergence or justify
-    termwise differentiation.
+    one summation index and powers of the form ``x**k``. It does not attempt
+    to prove convergence or justify termwise differentiation. If SymPy
+    rewrites the derivative into a form that is no longer a single sum, the
+    function raises ``ValueError``.
 
     Examples
     --------
@@ -313,54 +317,68 @@ class PowerSumNormalizer:
 
         If the summand contains ``x**(k + beta)`` and the target exponent is
         ``n + alpha``, then the returned shift is ``beta - alpha``. The old
-        index is then replaced by ``n - shift``.
+        index is replaced by ``n - shift``, so that the exponent becomes the
+        requested target exponent.
+
+        Examples
+        --------
+        For target exponent ``n``, the term ``x**(k + 2)`` has shift ``2``
+        and therefore uses the replacement ``k -> n - 2``. For target
+        exponent ``n + alpha``, the same term has shift ``2 - alpha``.
+
+        Only exponent shifts of the form ``k + constant`` are supported.
+        Direct multiplicative factors ``x`` are included in the total exponent,
+        so ``x * x**k`` is treated like ``x**(k + 1)``. Exponents such as
+        ``2*k`` or nonlinear expressions in ``k`` are not treated as index
+        shifts.
         """
         summand = _as_expr(summand, "summand")
         index = _validate_symbol(index, "index")
 
-        shifts = []
+        if isinstance(summand, sp.Add):
+            shifts = {
+                sp.simplify(self._extract_shift(term, index))
+                for term in summand.args
+            }
 
-        powers = list(summand.atoms(sp.Pow))
+            if len(shifts) != 1:
+                raise ValueError(
+                    "Inconsistent exponent shifts within one summand."
+                )
 
-        # SymPy represents a plain factor x not as Pow(x, 1). Treat it as
-        # x**1 when it occurs as a direct multiplicative factor.
-        direct_x_factors = [
-            factor for factor in sp.Mul.make_args(summand)
-            if factor == self.x
-        ]
-        powers.extend(sp.Pow(self.x, 1, evaluate=False) for _ in direct_x_factors)
+            return shifts.pop()
 
         target_offset = sp.simplify(self.target_exp - self.new_index)
 
-        for power in powers:
-            if power.base != self.x:
+        exponent = sp.Integer(0)
+        found_power = False
+
+        for factor in sp.Mul.make_args(summand):
+            if factor == self.x:
+                exponent += 1
+                found_power = True
                 continue
 
-            exponent = power.exp
+            if isinstance(factor, sp.Pow) and factor.base == self.x:
+                exponent += factor.exp
+                found_power = True
 
-            if not self._is_linear_in(exponent, index):
-                continue
-
-            if sp.simplify(exponent.coeff(index) - 1) != 0:
-                raise ValueError(
-                    "The exponent must be linear with coefficient 1 in "
-                    "the summation index."
-                )
-
-            exponent_offset = sp.simplify(exponent - index)
-            shifts.append(sp.simplify(exponent_offset - target_offset))
-
-        if not shifts:
+        if not found_power:
             return sp.Integer(0)
 
-        unique_shifts = {sp.simplify(shift) for shift in shifts}
+        exponent = sp.simplify(exponent)
 
-        if len(unique_shifts) != 1:
+        if not self._is_linear_in(exponent, index):
+            return sp.Integer(0)
+
+        if sp.simplify(exponent.coeff(index) - 1) != 0:
             raise ValueError(
-                "Inconsistent exponent shifts within one summand."
+                "The exponent must be a shift of the summation index, "
+                "for example k + s with coefficient 1 in k."
             )
 
-        return unique_shifts.pop()
+        exponent_offset = sp.simplify(exponent - index)
+        return sp.simplify(exponent_offset - target_offset)
 
     def _normalize_single_sum(self, sum_expr):
         """
@@ -401,10 +419,16 @@ class PowerSumNormalizer:
         """
         Normalize all matching power sums in an expression.
 
-        The expression is first prepared by pushing prefactors into sums and
-        splitting sums over additions. Then each sum is normalized separately.
+        The expression is first prepared by pushing prefactors into sums, for
+        example ``x * Sum(...) -> Sum(x * ...)`` when this is safe. Summands
+        are expanded enough to expose additions, and sums whose summands are
+        additions are then split into separate sums. Finally each resulting sum
+        is normalized to the configured target exponent.
 
-        Non-sum terms are preserved.
+        Non-sum terms are preserved. The method is structural and assumes
+        power factors of the form ``x**(k + s)`` or plain factors ``x``. It
+        does not check convergence or mathematical validity of the original
+        series.
 
         Parameters
         ----------
@@ -420,6 +444,15 @@ class PowerSumNormalizer:
         expr = _as_expr(expr, "expr")
 
         expr = push_prefactors_into_sums(expr)
+
+        expanded_sums = {
+            sum_expr: sp.Sum(sp.expand(sum_expr.function), *sum_expr.limits)
+            for sum_expr in expr.find(sp.Sum)
+        }
+
+        if expanded_sums:
+            expr = expr.xreplace(expanded_sums)
+
         expr = split_operator_over_addition(expr, sp.Sum)
 
         replacements = {
