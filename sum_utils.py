@@ -89,7 +89,6 @@ def _validate_symbol(symbol, name):
     return symbol
 
 
-
 def _sum_indices(sum_expr):
     """
     Return the summation indices of a SymPy sum.
@@ -341,9 +340,6 @@ def push_prefactors_into_sums(expr):
 
     return expr.xreplace(replacements)
 
-
-
-
 def rewrite_sum_lower_limit(expr, new_lower, index=None):
     """
     Rewrite sums to a new lower summation limit.
@@ -388,6 +384,14 @@ def rewrite_sum_lower_limit(expr, new_lower, index=None):
     ValueError
         If a matching sum has more than one summation index or if the
         lower-limit shift is not an explicit integer.
+
+    Notes
+    -----
+    Only single-index sums are supported. The difference between the old and
+    new lower limit must be an explicit integer; symbolic shifts are rejected.
+    Correction terms are generated structurally from the summand. The function
+    does not try to prove convergence or simplify the finite corrections
+    beyond SymPy's normal expression construction.
 
     Examples
     --------
@@ -452,16 +456,80 @@ def rewrite_sum_lower_limit(expr, new_lower, index=None):
 
     return expr.xreplace(replacements)
 
+def _validate_limits(limits):
+    """
+    Validate and normalize operator limits.
+
+    Parameters
+    ----------
+    limits : iterable
+        Limits in the same format as ``Sum.limits`` or ``Integral.limits``.
+
+    Returns
+    -------
+    tuple
+        Normalized tuple of limit tuples.
+
+    Raises
+    ------
+    TypeError
+        If ``limits`` is not an iterable of tuple-like limit specifications.
+
+    ValueError
+        If ``limits`` is empty.
+    """
+    if isinstance(limits, (str, bytes)):
+        raise TypeError("limits must be an iterable of limit tuples.")
+
+    try:
+        normalized = tuple(tuple(limit) for limit in limits)
+    except TypeError as exc:
+        raise TypeError("limits must be an iterable of limit tuples.") from exc
+
+    if not normalized:
+        raise ValueError("limits must contain at least one limit.")
+
+    return normalized
+
+
 def split_operator_over_addition(expr, operator):
     """
-    Split linear operators over additions.
+    Split a linear SymPy operator over additions.
 
     The transformation is
 
         L(f + g) -> L(f) + L(g)
 
-    where ``L`` is a linear operator such as ``sp.Sum`` or
-    ``sp.Integral``.
+    where ``L`` is an operator with SymPy's usual ``.function`` and
+    ``.limits`` interface, such as ``sp.Sum`` or ``sp.Integral``.
+
+    Parameters
+    ----------
+    expr : sympy.Expr
+        Expression containing operator applications.
+
+    operator : callable
+        SymPy operator class, for example ``sp.Sum`` or ``sp.Integral``.
+
+    Returns
+    -------
+    sympy.Expr
+        Expression in which matching operator applications with additive
+        interiors have been split. If no matching structure is found, the
+        expression is returned unchanged.
+
+    Raises
+    ------
+    TypeError
+        If ``expr`` cannot be converted to a SymPy expression or if
+        ``operator`` is not callable.
+
+    Examples
+    --------
+    >>> i, n, x = sp.symbols("i n x")
+    >>> expr = sp.Sum(i + x, (i, 1, n))
+    >>> split_operator_over_addition(expr, sp.Sum)
+    Sum(i, (i, 1, n)) + Sum(x, (i, 1, n))
     """
     expr = _as_expr(expr, "expr")
 
@@ -486,14 +554,52 @@ def split_operator_over_addition(expr, operator):
 
 def collect_operator_terms(expr, operator, limits):
     """
-    Collect operators with identical limits into a single operator.
+    Collect operator terms with identical limits into one operator.
 
     The transformation is
 
         L(f) + L(g) -> L(f + g)
 
-    where ``L`` is a linear operator such as ``sp.Sum`` or
-    ``sp.Integral``.
+    where ``L`` is an operator with SymPy's usual ``.function`` and
+    ``.limits`` interface, such as ``sp.Sum`` or ``sp.Integral``. Only
+    operator applications whose limits exactly match ``limits`` are collected;
+    all other terms are preserved.
+
+    Parameters
+    ----------
+    expr : sympy.Expr
+        Expression containing operator applications.
+
+    operator : callable
+        SymPy operator class, for example ``sp.Sum`` or ``sp.Integral``.
+
+    limits : iterable
+        Target limits in the same format as ``operator(...).limits``. Lists
+        are accepted and normalized to tuples.
+
+    Returns
+    -------
+    sympy.Expr
+        Expression with matching operator terms collected into one operator.
+        If no matching terms are found, the original expression is returned
+        unchanged.
+
+    Raises
+    ------
+    TypeError
+        If ``expr`` cannot be converted to a SymPy expression, if
+        ``operator`` is not callable, or if ``limits`` is not an iterable of
+        limit tuples.
+
+    ValueError
+        If ``limits`` is empty.
+
+    Examples
+    --------
+    >>> i, n, x = sp.symbols("i n x")
+    >>> expr = sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+    >>> collect_operator_terms(expr, sp.Sum, ((i, 1, n),))
+    Sum(i + x, (i, 1, n))
     """
     expr = _as_expr(expr, "expr")
 
@@ -501,6 +607,8 @@ def collect_operator_terms(expr, operator, limits):
         raise TypeError(
             "operator must be a callable SymPy operator class."
         )
+
+    limits = _validate_limits(limits)
 
     targets = [
         op_expr for op_expr in expr.find(operator)

@@ -329,3 +329,42 @@ def test_rewrite_sum_lower_limit_raises_value_error_for_matching_multi_index_sum
 
     with pytest.raises(ValueError):
         rewrite_sum_lower_limit(expr, 2, index=i)
+
+
+def test_collect_operator_terms_accepts_list_limits():
+    expr = sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+    expected = sp.Sum(i + x, (i, 1, n))
+
+    result = collect_operator_terms(expr, sp.Sum, [(i, 1, n)])
+
+    assert result == expected
+
+
+def test_collect_operator_terms_preserves_non_operator_terms():
+    expr = 7 + sp.Sum(i, (i, 1, n)) + sp.Sum(x, (i, 1, n))
+    expected = 7 + sp.Sum(i + x, (i, 1, n))
+
+    result = collect_operator_terms(expr, sp.Sum, ((i, 1, n),))
+
+    assert result == expected
+
+
+def test_collect_operator_terms_rejects_non_iterable_limits():
+    expr = sp.Sum(i, (i, 1, n))
+
+    with pytest.raises(TypeError):
+        collect_operator_terms(expr, sp.Sum, 1)
+
+
+def test_collect_operator_terms_rejects_string_limits():
+    expr = sp.Sum(i, (i, 1, n))
+
+    with pytest.raises(TypeError):
+        collect_operator_terms(expr, sp.Sum, "limits")
+
+
+def test_collect_operator_terms_rejects_empty_limits():
+    expr = sp.Sum(i, (i, 1, n))
+
+    with pytest.raises(ValueError):
+        collect_operator_terms(expr, sp.Sum, ())
