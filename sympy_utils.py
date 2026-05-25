@@ -35,6 +35,115 @@ of standalone utility functions intended for direct practical use.
 import sympy as sp
 from sympy.simplify.fu import TR10
 
+
+def _as_expr(expr, name):
+    """
+    Convert an object to a SymPy expression.
+
+    Parameters
+    ----------
+    expr : object
+        Object to convert.
+
+    name : str
+        Name used in the error message.
+
+    Returns
+    -------
+    sympy.Expr
+        Converted SymPy expression.
+
+    Raises
+    ------
+    TypeError
+        If the object cannot be converted to a SymPy expression.
+    """
+    try:
+        expr = sp.sympify(expr)
+    except Exception as exc:
+        raise TypeError(
+            f"{name} must be a SymPy expression or convertible to one."
+        ) from exc
+
+    if not isinstance(expr, sp.Expr):
+        raise TypeError(
+            f"{name} must be a SymPy expression, got {type(expr).__name__}."
+        )
+
+    return expr
+
+
+def _validate_symbol(symbol, name):
+    """
+    Validate that an object is a SymPy symbol.
+
+    Parameters
+    ----------
+    symbol : object
+        Object to validate.
+
+    name : str
+        Name used in the error message.
+
+    Returns
+    -------
+    sympy.Symbol
+        The validated symbol.
+
+    Raises
+    ------
+    TypeError
+        If ``symbol`` is not a SymPy symbol.
+    """
+    if not isinstance(symbol, sp.Symbol):
+        raise TypeError(
+            f"{name} must be a SymPy Symbol, got {type(symbol).__name__}."
+        )
+
+    return symbol
+
+
+def _validate_positive_integer(value, name):
+    """
+    Validate that an object is a positive integer.
+
+    Parameters
+    ----------
+    value : object
+        Object to validate.
+
+    name : str
+        Name used in the error message.
+
+    Returns
+    -------
+    int
+        The validated integer as a Python ``int``.
+
+    Raises
+    ------
+    TypeError
+        If ``value`` is not an integer.
+
+    ValueError
+        If ``value`` is not positive.
+    """
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be a positive integer, not bool.")
+
+    if not isinstance(value, (int, sp.Integer)):
+        raise TypeError(
+            f"{name} must be a positive integer, got {type(value).__name__}."
+        )
+
+    value = int(value)
+
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer, got {value}.")
+
+    return value
+
+
 def formal_series(expr, small_expr, x0=0, n=6, *, dummy=None):
     """
     Compute a formal series expansion in a given expression.
@@ -47,28 +156,46 @@ def formal_series(expr, small_expr, x0=0, n=6, *, dummy=None):
 
     Parameters
     ----------
-    expr : sympy expression
+    expr : sympy.Expr
         Expression to expand.
-    small_expr : sympy expression
-        Expression treated as the expansion variable.
-    x0 : sympy expression, optional
-        Expansion point (default: 0), consistent with sympy.series.
+
+    small_expr : sympy.Expr
+        Expression treated as the expansion variable. For composite
+        expressions, it must occur as an exact structural subexpression of
+        ``expr``.
+
+    x0 : sympy.Expr, optional
+        Expansion point. The default is 0, consistent with ``sympy.series``.
+
     n : int, optional
-        Expansion order (default: 6), consistent with sympy.series.
-    dummy : sympy Symbol, optional
-        Dummy variable used internally.
+        Expansion order. The default is 6, consistent with ``sympy.series``.
+
+    dummy : sympy.Symbol, optional
+        Dummy variable used internally for composite ``small_expr`` values.
 
     Returns
     -------
-    sympy expression
-        Formal series of `expr` in `small_expr`.
+    sympy.Expr
+        Formal series of ``expr`` in ``small_expr``. If ``small_expr`` is a
+        symbol, SymPy's ordinary series including the ``O(...)`` term is
+        returned. If ``small_expr`` is composite, only the regular part is
+        returned because no reliable ``O(...)`` term in a composite expression
+        is constructed.
+
+    Raises
+    ------
+    TypeError
+        If inputs cannot be converted to SymPy expressions, if ``dummy`` is
+        not a SymPy symbol, or if ``n`` is not an integer.
+
+    ValueError
+        If ``n`` is not positive or if a composite ``small_expr`` is not found
+        as an exact structural subexpression of ``expr``.
 
     Notes
     -----
     This is a *formal* series expansion in ``small_expr`` and not a
     Taylor expansion in the variables from which ``small_expr`` is built.
-
-    For composite expressions, no meaningful ``O(...)`` term can be given.
 
     Examples
     --------
@@ -77,11 +204,10 @@ def formal_series(expr, small_expr, x0=0, n=6, *, dummy=None):
     1 + x + y + (x + y)**2/2 + (x + y)**3/6
     """
 
-    expr = sp.sympify(expr)
-    small_expr = sp.sympify(small_expr)
-
-    if n <= 0:
-        raise ValueError("n must be a positive integer")
+    expr = _as_expr(expr, "expr")
+    small_expr = _as_expr(small_expr, "small_expr")
+    x0 = _as_expr(x0, "x0")
+    n = _validate_positive_integer(n, "n")
 
     # --- Fast path: small_expr is a Symbol -------------------------------
     if small_expr.is_Symbol:
@@ -90,10 +216,7 @@ def formal_series(expr, small_expr, x0=0, n=6, *, dummy=None):
 
     # --- General case: composite expression ------------------------------
     z = dummy if dummy is not None else sp.Dummy("formal_series_var")
-    z = sp.sympify(z)
-
-    if not z.is_Symbol:
-        raise TypeError("dummy must be a SymPy Symbol")
+    z = _validate_symbol(z, "dummy")
 
     # Exact structural substitution
     substituted = expr.xreplace({small_expr: z})
@@ -144,7 +267,7 @@ def expand_to_half_angle(expr, *angles):
     sympy expression
         The transformed expression.
     """
-    expr = sp.sympify(expr)
+    expr = _as_expr(expr, "expr")
 
     if not angles:
         return expr
@@ -152,7 +275,7 @@ def expand_to_half_angle(expr, *angles):
     result = expr
 
     for angle in angles:
-        angle = sp.sympify(angle)
+        angle = _as_expr(angle, "angle")
 
         a1 = sp.Dummy("half_angle_1")
         a2 = sp.Dummy("half_angle_2")
@@ -166,7 +289,6 @@ def expand_to_half_angle(expr, *angles):
         })
 
     return result
-
 
 
 def integrate_by_parts(integral, u, vp):
@@ -213,9 +335,9 @@ def integrate_by_parts(integral, u, vp):
     The boundary terms of definite integrals are computed with limits. This
     handles cases where direct substitution would produce indeterminate forms.
     """
-    integral = sp.sympify(integral)
-    u = sp.sympify(u)
-    vp = sp.sympify(vp)
+    integral = _as_expr(integral, "integral")
+    u = _as_expr(u, "u")
+    vp = _as_expr(vp, "vp")
 
     if not isinstance(integral, sp.Integral):
         raise TypeError("integral must be a SymPy Integral")
@@ -296,14 +418,11 @@ def real_apart(expr, x):
     -----
     The input must be rational in ``x``. Internally, the expression is first
     decomposed over the complex numbers using ``apart(..., full=True)``.
-    Complex conjugate terms are then paired and added, producing real
-    irreducible factors whenever possible.
+    Complex conjugate terms are then paired and added. This produces a real
+    decomposition whenever the conjugate pairing succeeds.
     """
-    expr = sp.sympify(expr)
-    x = sp.sympify(x)
-
-    if not x.is_Symbol:
-        raise TypeError("x must be a SymPy Symbol")
+    expr = _as_expr(expr, "expr")
+    x = _validate_symbol(x, "x")
 
     if not expr.is_rational_function(x):
         raise ValueError("expr must be rational in x")
@@ -401,3 +520,4 @@ if __name__ == "__main__":
 
     print("\nTransformed:")
     print(real_apart(expr, x))
+
